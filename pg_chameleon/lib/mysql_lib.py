@@ -464,11 +464,15 @@ class mysql_source(object):
                     WHEN
                         data_type IN ('datetime','timestamp','date')
                     THEN
-                        concat('nullif(`',column_name,'`,cast("0000-00-00 00:00:00" as date))')
+                        concat('if (INSTR(cast(`',column_name,'` as char), "0000-00-00"),cast("1970-01-01 00:00:01" as date),`',column_name,'`)')
                     WHEN
                         data_type IN ('"""+"','".join(self.spatial_datatypes)+"""')
                     THEN
                         concat('ST_AsText(',column_name,')')
+                    WHEN
+                        data_type in ('longtext','varchar')
+                    THEN
+                        concat('cast(if(`', column_name,'` = 0x00," ",if(`', column_name,'` = "NULL","null ",`',column_name,'`)) AS char CHARACTER SET """+ self.charset +""")')
 
                 ELSE
                     concat('cast(`',column_name,'` AS char CHARACTER SET """+ self.charset +""")')
@@ -486,11 +490,15 @@ class mysql_source(object):
                     WHEN
                         data_type IN ('datetime','timestamp','date')
                     THEN
-                        concat('nullif(`',column_name,'`,cast("0000-00-00 00:00:00" as date)) AS `',column_name,'`')
+                        concat('if (INSTR(cast(`',column_name,'` as char), "0000-00-00"),cast("1970-01-01 00:00:01" as date),`',column_name,'`) as `',column_name,'`')
                     WHEN
                         data_type IN ('"""+"','".join(self.spatial_datatypes)+"""')
                     THEN
                         concat('ST_AsText(',column_name,') AS','`',column_name,'`')
+                    WHEN
+                        data_type in ('longtext','varchar')
+                    THEN
+                        concat('cast(if(`', column_name,'` = 0x00," ",if(`', column_name,'` = "NULL","null ",`',column_name,'`)) AS char CHARACTER SET """+ self.charset +""") AS','`',column_name,'`')
 
                 ELSE
                     concat('cast(`',column_name,'` AS char CHARACTER SET """+ self.charset +""") AS','`',column_name,'`')
@@ -648,7 +656,7 @@ class mysql_source(object):
             csv_results = self.cursor_unbuffered.fetchmany(copy_limit)
             if len(csv_results) == 0:
                 break
-            csv_data="\n".join(d[0] for d in csv_results )
+            csv_data="\n".join(d[0].replace('\x00', '') for d in csv_results )
 
             if self.copy_mode == 'direct':
                 csv_file = io.StringIO()
